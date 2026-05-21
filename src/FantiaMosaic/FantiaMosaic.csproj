@@ -14,7 +14,9 @@
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
     <Product>FantiaMosaic</Product>
-    <Company>boiler</Company>
+    <Company>dhq_boiler</Company>
+    <Authors>dhq_boiler</Authors>
+    <Copyright>Copyright (c) 2026 dhq_boiler</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
