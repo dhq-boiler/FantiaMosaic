@@ -1,0 +1,561 @@
+<Window
+    x:Class="FantiaMosaic.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="clr-namespace:FantiaMosaic.Views"
+    xmlns:vm="clr-namespace:FantiaMosaic.ViewModels"
+    Title="FantiaMosaic v1.0"
+    Width="1320"
+    Height="820"
+    AllowDrop="True"
+    DragOver="OnDragOver"
+    Drop="OnFileDrop">
+    <Window.DataContext>
+        <vm:MainViewModel x:Name="ViewModel" />
+    </Window.DataContext>
+    <Window.Resources>
+        <views:ComplianceBrushConverter x:Key="ComplianceBrushConverter" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="ファイル(_F)">
+                <MenuItem
+                    Command="{Binding OpenFilesCommand}"
+                    Header="画像を開く(_O)..."
+                    InputGestureText="Ctrl+O" />
+                <MenuItem
+                    Command="{Binding OpenFolderCommand}"
+                    Header="フォルダを開く(_D)..."
+                    InputGestureText="Ctrl+Shift+O" />
+                <Separator />
+                <MenuItem
+                    Command="{Binding SaveSessionCommand}"
+                    Header="セッション保存..."
+                    InputGestureText="Ctrl+S" />
+                <MenuItem Command="{Binding LoadSessionCommand}" Header="セッション読み込み..." />
+                <MenuItem Command="{Binding MergeSessionCommand}" Header="セッション追加読み込み (マージ)..." />
+                <Separator />
+                <MenuItem Command="{Binding ExportDatasetCommand}" Header="DLデータセットをエクスポート (YOLO-OBB)..." />
+                <Separator />
+                <MenuItem Command="{Binding ChooseOutputFolderCommand}" Header="出力先フォルダ..." />
+                <MenuItem
+                    Command="{Binding ExportAllCommand}"
+                    Header="エクスポート(_E)"
+                    InputGestureText="Ctrl+E" />
+            </MenuItem>
+            <MenuItem Header="プリセット(_P)">
+                <MenuItem Command="{Binding ApplyPresetDefaultCommand}" Header="標準（静止画）" />
+                <MenuItem Command="{Binding ApplyPresetStrongCommand}" Header="強（動画/高解像度）" />
+            </MenuItem>
+            <MenuItem Header="一括(_B)">
+                <MenuItem Command="{Binding CopyRegionsToAllCommand}" Header="選択ジョブの領域を他の全画像にコピー" />
+                <MenuItem Command="{Binding AutoDetectGridAllCommand}" Header="全画像で格子モザイク検出" />
+                <MenuItem Command="{Binding AutoDetectStripesAllCommand}" Header="全画像で棒線隠蔽検出" />
+                <MenuItem Command="{Binding AutoDetectYoloAllCommand}" Header="全画像で DL 検出" />
+                <MenuItem Command="{Binding AutoDetectAllCommand}" Header="全画像で軸並行検出(旧)" />
+                <Separator />
+                <MenuItem Command="{Binding ClearAllCommand}" Header="一覧クリア" />
+            </MenuItem>
+            <MenuItem Header="DL(_D)">
+                <MenuItem Command="{Binding LoadYoloModelCommand}" Header="モデル(.onnx)を読み込む..." />
+                <MenuItem
+                    Header="GPU で推論する"
+                    IsCheckable="True"
+                    IsChecked="{Binding YoloUseGpu}" />
+            </MenuItem>
+        </Menu>
+
+        <DockPanel DockPanel.Dock="Bottom" LastChildFill="True">
+            <ProgressBar
+                Height="6"
+                DockPanel.Dock="Top"
+                Maximum="{Binding ProgressMaximum}"
+                Visibility="{Binding IsExporting, Converter={StaticResource BoolToVis}}"
+                Value="{Binding ProgressValue}" />
+            <StatusBar>
+                <TextBlock Text="{Binding StatusText}" />
+                <Separator />
+                <TextBlock Text="{Binding ProgressText}" Visibility="{Binding IsExporting, Converter={StaticResource BoolToVis}}" />
+                <Button
+                    Command="{Binding CancelExportCommand}"
+                    Content="中断"
+                    Visibility="{Binding IsExporting, Converter={StaticResource BoolToVis}}" />
+            </StatusBar>
+        </DockPanel>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="300" />
+            </Grid.ColumnDefinitions>
+
+            <!--  左: ジョブ一覧  -->
+            <DockPanel Grid.Column="0" Margin="4">
+                <TextBlock
+                    Margin="4"
+                    DockPanel.Dock="Top"
+                    FontWeight="Bold"
+                    Text="画像一覧" />
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                    <Button
+                        Command="{Binding OpenFilesCommand}"
+                        Content="ファイル"
+                        ToolTip="画像を選んで追加" />
+                    <Button
+                        Command="{Binding OpenFolderCommand}"
+                        Content="フォルダ"
+                        ToolTip="フォルダごと追加" />
+                    <Button Command="{Binding RemoveSelectedCommand}" Content="削除" />
+                    <Button Command="{Binding ClearAllCommand}" Content="全消" />
+                </StackPanel>
+                <CheckBox
+                    Margin="4"
+                    Content="サブフォルダも含む"
+                    DockPanel.Dock="Top"
+                    IsChecked="{Binding RecursiveFolderImport}" />
+                <ListBox
+                    ItemsSource="{Binding Jobs}"
+                    ScrollViewer.IsDeferredScrollingEnabled="True"
+                    SelectedItem="{Binding SelectedJob, Mode=TwoWay}"
+                    VirtualizingPanel.IsVirtualizing="True"
+                    VirtualizingPanel.VirtualizationMode="Recycling">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Text="{Binding FileName}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock FontSize="11" Foreground="Gray">
+                                    <Run Text="{Binding SizeText, Mode=OneWay}" />
+                                    <Run Text=" / 領域: " />
+                                    <Run Text="{Binding RegionCount, Mode=OneWay}" />
+                                </TextBlock>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <!--  中央: エディタ  -->
+            <DockPanel Grid.Column="1" Margin="4">
+                <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                    <Button Command="{Binding ClearRegionsCommand}" Content="領域クリア" />
+                    <Button
+                        Command="{Binding AutoDetectGridCommand}"
+                        Content="格子モザイク検出"
+                        ToolTip="タイル状モザイクを NCC+PCA で検出 (傾き対応)" />
+                    <Button
+                        Command="{Binding AutoDetectStripesCommand}"
+                        Content="棒線隠蔽検出"
+                        ToolTip="平行な黒い棒線で部分隠蔽されてる領域を検出" />
+                    <Button
+                        Background="#7B68EE"
+                        Command="{Binding TuneStripeParametersCommand}"
+                        Content="パラメータ調整(この画像)"
+                        Foreground="White"
+                        ToolTip="今選択中の画像に描いた正解矩形に合うパラメータを座標降下法で探索" />
+                    <Button
+                        Background="#5C4FD8"
+                        Command="{Binding TuneStripeFromAllSamplesCommand}"
+                        Content="パラメータ調整(複数画像で学習)"
+                        Foreground="White"
+                        ToolTip="GT(正解矩形)を描いた全画像を使って平均IoUを最大化するパラメータを探索" />
+                    <Button
+                        Background="#1F8B4C"
+                        Command="{Binding AutoDetectYoloCommand}"
+                        Content="DL検出"
+                        Foreground="White"
+                        ToolTip="学習済み YOLO-OBB モデルで検出 (要 ONNX モデル)" />
+                    <Button
+                        Background="#0E6B36"
+                        Command="{Binding AutoDetectYoloAllCommand}"
+                        Content="DL検出 (全画像)"
+                        Foreground="White"
+                        ToolTip="ロード済み全画像に対して学習済みモデルで一括検出" />
+                    <Button
+                        Command="{Binding AutoDetectRegionsCommand}"
+                        Content="軸並行(旧)"
+                        ToolTip="旧版：色クラスタで軸並行矩形を検出" />
+                    <Button Command="{Binding CopyRegionsToAllCommand}" Content="領域を全画像にコピー" />
+                    <CheckBox
+                        Margin="8,0"
+                        VerticalAlignment="Center"
+                        Content="プレビュー"
+                        IsChecked="{Binding ElementName=Editor, Path=ShowPreview, Mode=TwoWay}" />
+                </WrapPanel>
+                <WrapPanel
+                    Margin="0,2,0,2"
+                    DockPanel.Dock="Top"
+                    Orientation="Horizontal">
+                    <TextBlock
+                        Margin="4,0"
+                        VerticalAlignment="Center"
+                        Text="ビュー:" />
+                    <Button
+                        Click="OnFitClick"
+                        Content="フィット (F)"
+                        ToolTip="画像全体がビューポートに収まるよう調整" />
+                    <Button
+                        Click="OnResetSizeClick"
+                        Content="等倍 (1)"
+                        ToolTip="100% 表示で中央配置" />
+                    <Button Click="OnZoomInClick" Content="ズーム + (+)" />
+                    <Button Click="OnZoomOutClick" Content="ズーム − (-)" />
+                    <TextBlock
+                        Margin="8,0"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="Gray"
+                        Text="(ホイール=ズーム / 中ドラッグ=パン)" />
+                </WrapPanel>
+                <Border
+                    Margin="0,2"
+                    Padding="6"
+                    Background="#FFF7E0"
+                    DockPanel.Dock="Top"
+                    Visibility="{Binding IsTuning, Converter={StaticResource BoolToVis}}">
+                    <DockPanel>
+                        <Button
+                            Margin="6,0,0,0"
+                            Command="{Binding CancelTuneCommand}"
+                            Content="中断"
+                            DockPanel.Dock="Right" />
+                        <TextBlock
+                            DockPanel.Dock="Top"
+                            FontWeight="Bold"
+                            Text="{Binding TuneStatus}" />
+                        <ProgressBar
+                            Height="8"
+                            Maximum="{Binding TuneProgressMax}"
+                            Value="{Binding TuneProgressValue}" />
+                    </DockPanel>
+                </Border>
+                <Border
+                    Margin="0,2"
+                    Padding="6"
+                    Background="#E0F7E5"
+                    DockPanel.Dock="Top"
+                    Visibility="{Binding IsDetecting, Converter={StaticResource BoolToVis}}">
+                    <DockPanel>
+                        <Button
+                            Margin="6,0,0,0"
+                            Command="{Binding CancelDetectCommand}"
+                            Content="中断"
+                            DockPanel.Dock="Right" />
+                        <TextBlock DockPanel.Dock="Top" FontWeight="Bold">
+                            <Run Text="DL検出中: " /><Run Text="{Binding DetectStatus}" />
+                        </TextBlock>
+                        <ProgressBar
+                            Height="8"
+                            Maximum="{Binding DetectProgressMax}"
+                            Value="{Binding DetectProgressValue}" />
+                    </DockPanel>
+                </Border>
+                <Border BorderBrush="Gray" BorderThickness="1">
+                    <views:MosaicEditorCanvas
+                        x:Name="Editor"
+                        Bitmap="{Binding CurrentBitmap}"
+                        Job="{Binding SelectedJob}"
+                        Settings="{Binding Settings}" />
+                </Border>
+            </DockPanel>
+
+            <!--  右: 設定パネル  -->
+            <ScrollViewer
+                Grid.Column="2"
+                Margin="4"
+                VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock
+                        Margin="4"
+                        FontWeight="Bold"
+                        Text="モザイク設定" />
+
+                    <TextBlock Margin="4,8,4,2" Text="モード" />
+                    <ComboBox
+                        Margin="4"
+                        ItemsSource="{Binding AvailableModes}"
+                        SelectedItem="{Binding SelectedMode, Mode=TwoWay}" />
+
+                    <TextBlock Margin="4,8,4,2" Text="塗りつぶし色 (SolidFill 時)" />
+                    <ComboBox
+                        Margin="4"
+                        DisplayMemberPath="Name"
+                        ItemsSource="{Binding SolidColorPresets}"
+                        SelectedItem="{Binding SelectedSolidColor, Mode=TwoWay}" />
+
+                    <TextBlock Margin="4,8,4,2">
+                        <Run Text="強度（短辺比 %）: " />
+                        <Run Text="{Binding RelativeStrengthPercent, Mode=OneWay, StringFormat={}{0:F1}}" />
+                    </TextBlock>
+                    <Slider
+                        Margin="4"
+                        IsSnapToTickEnabled="True"
+                        Maximum="10"
+                        Minimum="0.5"
+                        TickFrequency="0.5"
+                        Value="{Binding RelativeStrengthPercent, Mode=TwoWay}" />
+
+                    <TextBlock Margin="4,8,4,2">
+                        <Run Text="絶対下限（px）: " />
+                        <Run Text="{Binding MinimumStrengthPx, Mode=OneWay}" />
+                    </TextBlock>
+                    <Slider
+                        Margin="4"
+                        IsSnapToTickEnabled="True"
+                        Maximum="64"
+                        Minimum="4"
+                        TickFrequency="1"
+                        Value="{Binding MinimumStrengthPx, Mode=TwoWay}" />
+
+                    <TextBlock Margin="4,8,4,2">
+                        <Run Text="サムネイル長辺（px、0=出力しない）: " />
+                        <Run Text="{Binding ThumbnailLongSide, Mode=OneWay}" />
+                    </TextBlock>
+                    <Slider
+                        Margin="4"
+                        IsSnapToTickEnabled="True"
+                        Maximum="1920"
+                        Minimum="0"
+                        TickFrequency="160"
+                        Value="{Binding ThumbnailLongSide, Mode=TwoWay}" />
+
+                    <Border
+                        Margin="4,12,4,4"
+                        Padding="8"
+                        Background="#F5F5F5"
+                        CornerRadius="3">
+                        <StackPanel>
+                            <TextBlock FontWeight="Bold" Text="ガイドライン適合チェック" />
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                Foreground="{Binding IsCompliant, Converter={StaticResource ComplianceBrushConverter}}"
+                                Text="{Binding ComplianceText}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border
+                        Margin="4"
+                        Padding="6"
+                        BorderBrush="LightGray"
+                        BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock FontWeight="Bold" Text="出力先" />
+                            <TextBlock
+                                Margin="0,2,0,4"
+                                FontSize="11"
+                                Foreground="Gray"
+                                Text="{Binding OutputFolder}"
+                                TextWrapping="Wrap" />
+                            <Button Command="{Binding ChooseOutputFolderCommand}" Content="フォルダ選択..." />
+                            <Button
+                                Margin="0,6,0,0"
+                                Background="#4CAF50"
+                                Command="{Binding ExportAllCommand}"
+                                Content="一括エクスポート実行"
+                                FontWeight="Bold"
+                                Foreground="White" />
+                        </StackPanel>
+                    </Border>
+
+                    <Expander
+                        Margin="4,12,4,4"
+                        Header="検出パラメータ"
+                        IsExpanded="False">
+                        <StackPanel>
+                            <TextBlock
+                                Margin="0,4,0,2"
+                                FontWeight="Bold"
+                                Text="格子モザイク検出" />
+                            <TextBlock Margin="0,2">
+                                <Run Text="マッチしきい値: " />
+                                <Run Text="{Binding GridMatchThreshold, Mode=OneWay, StringFormat={}{0:F2}}" />
+                                <Run
+                                    FontSize="10"
+                                    Foreground="Gray"
+                                    Text=" (低=広く検出 / 高=厳しく)" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="0.6"
+                                Minimum="0.15"
+                                TickFrequency="0.01"
+                                Value="{Binding GridMatchThreshold, Mode=TwoWay}" />
+
+                            <TextBlock Margin="0,6,0,2">
+                                <Run Text="安全マージン: " />
+                                <Run Text="{Binding GridSafetyMargin, Mode=OneWay, StringFormat={}{0:P0}}" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="0.3"
+                                Minimum="0"
+                                TickFrequency="0.05"
+                                Value="{Binding GridSafetyMargin, Mode=TwoWay}" />
+
+                            <Separator Margin="0,8" />
+
+                            <TextBlock FontWeight="Bold" Text="棒線隠蔽検出" />
+                            <TextBlock Margin="0,4,0,2">
+                                <Run Text="棒線最小幅 (px): " />
+                                <Run Text="{Binding StripeMinWidthPx, Mode=OneWay}" />
+                                <Run
+                                    FontSize="10"
+                                    Foreground="Gray"
+                                    Text=" (細い線画を除外)" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="30"
+                                Minimum="1"
+                                TickFrequency="1"
+                                Value="{Binding StripeMinWidthPx, Mode=TwoWay}" />
+
+                            <TextBlock Margin="0,4,0,2">
+                                <Run Text="棒線最大幅 (px): " />
+                                <Run Text="{Binding StripeMaxWidthPx, Mode=OneWay}" />
+                                <Run
+                                    FontSize="10"
+                                    Foreground="Gray"
+                                    Text=" (ベタ塗りを除外)" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="200"
+                                Minimum="1"
+                                TickFrequency="1"
+                                Value="{Binding StripeMaxWidthPx, Mode=TwoWay}" />
+
+                            <TextBlock Margin="0,4,0,2">
+                                <Run Text="棒線最大長 (px): " />
+                                <Run Text="{Binding StripeMaxLengthPx, Mode=OneWay}" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="2000"
+                                Minimum="50"
+                                TickFrequency="10"
+                                Value="{Binding StripeMaxLengthPx, Mode=TwoWay}" />
+
+                            <TextBlock Margin="0,4,0,2">
+                                <Run Text="棒線最小ピクセル数: " />
+                                <Run Text="{Binding StripeMinPixels, Mode=OneWay}" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="500"
+                                Minimum="20"
+                                TickFrequency="10"
+                                Value="{Binding StripeMinPixels, Mode=TwoWay}" />
+
+                            <TextBlock Margin="0,4,0,2">
+                                <Run Text="直交方向拡張比: " />
+                                <Run Text="{Binding StripeMinShortToLongRatio, Mode=OneWay, StringFormat={}{0:F2}}" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="1.5"
+                                Minimum="0.1"
+                                TickFrequency="0.05"
+                                Value="{Binding StripeMinShortToLongRatio, Mode=TwoWay}" />
+
+                            <TextBlock Margin="0,4,0,2">
+                                <Run Text="Opening半径 (px): " />
+                                <Run Text="{Binding StripeOpeningRadius, Mode=OneWay}" />
+                                <Run
+                                    FontSize="10"
+                                    Foreground="Gray"
+                                    Text=" (細線除去)" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="10"
+                                Minimum="0"
+                                TickFrequency="1"
+                                Value="{Binding StripeOpeningRadius, Mode=TwoWay}" />
+
+                            <TextBlock Margin="0,4,0,2">
+                                <Run Text="Closing半径 (px): " />
+                                <Run Text="{Binding StripeClosingRadius, Mode=OneWay}" />
+                                <Run
+                                    FontSize="10"
+                                    Foreground="Gray"
+                                    Text=" (装飾の隙間埋め)" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="20"
+                                Minimum="0"
+                                TickFrequency="1"
+                                Value="{Binding StripeClosingRadius, Mode=TwoWay}" />
+
+                            <Separator Margin="0,8" />
+
+                            <TextBlock FontWeight="Bold" Text="DL (YOLO-OBB)" />
+                            <TextBlock
+                                Margin="0,4,0,2"
+                                FontSize="11"
+                                Foreground="Gray"
+                                Text="{Binding YoloModelPath}"
+                                TextWrapping="Wrap" />
+                            <Button Command="{Binding LoadYoloModelCommand}" Content="モデル(.onnx)を読み込む..." />
+                            <CheckBox
+                                Margin="0,4"
+                                Content="GPU で推論"
+                                IsChecked="{Binding YoloUseGpu}" />
+
+                            <TextBlock Margin="0,4,0,2">
+                                <Run Text="信頼度しきい値: " />
+                                <Run Text="{Binding YoloConfidenceThreshold, Mode=OneWay, StringFormat={}{0:F2}}" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="0.9"
+                                Minimum="0.05"
+                                TickFrequency="0.05"
+                                Value="{Binding YoloConfidenceThreshold, Mode=TwoWay}" />
+
+                            <TextBlock Margin="0,4,0,2">
+                                <Run Text="入力サイズ: " />
+                                <Run Text="{Binding YoloImgSize, Mode=OneWay}" />
+                            </TextBlock>
+                            <Slider
+                                IsSnapToTickEnabled="True"
+                                Maximum="1280"
+                                Minimum="320"
+                                TickFrequency="32"
+                                Value="{Binding YoloImgSize, Mode=TwoWay}" />
+                        </StackPanel>
+                    </Expander>
+
+                    <TextBlock
+                        Margin="4,12,4,4"
+                        FontSize="11"
+                        Foreground="Gray"
+                        TextWrapping="Wrap">
+                        操作: 左ドラッグ=矩形 / Shift+左=楕円 / クリック=選択 / Delete=削除
+                    </TextBlock>
+                    <TextBlock
+                        Margin="4,2,4,4"
+                        FontSize="11"
+                        Foreground="Gray"
+                        TextWrapping="Wrap">
+                        選択中の回転矩形: 中央=移動 / 4隅=リサイズ / 上のオレンジ点=回転
+                    </TextBlock>
+                    <TextBlock
+                        Margin="4,2,4,4"
+                        FontSize="11"
+                        Foreground="Gray"
+                        TextWrapping="Wrap">
+                        ヒント: 連作で似たレイアウトなら「領域を全画像にコピー」が速いっす。
+                        作業中断したい時は「セッション保存」してまた読み込めるっす。
+                    </TextBlock>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>
